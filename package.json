@@ -1,0 +1,28 @@
+{
+  "name": "pi-attention",
+  "version": "0.1.0",
+  "description": "Sound and macOS notifications when a Pi agent asks a question in an unfocused tmux window.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Pascal Poredda",
+  "repository": { "type": "git", "url": "https://github.com/pascalporedda/pi-attention.git" },
+  "keywords": ["pi-package", "pi", "tmux", "notifications", "alacritty"],
+  "files": ["src", "README.md", "LICENSE"],
+  "pi": { "extensions": ["./src/index.ts"] },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@stylistic/eslint-plugin": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.5"
+  }
+}
