@@ -8,7 +8,7 @@ const target = {
 	tmux: '/opt/homebrew/bin/tmux', terminalBundleId: 'org.alacritty',
 };
 
-function mockRun(state = '$1\t@5\t%11\t0', clients = '/dev/ttys000\t$1\t100\tattached,focused') {
+function mockRun(state = '$1|@5|%11|0', clients = '/dev/ttys000|$1|100|attached,focused') {
 	return vi.fn<RunCommand>(async (_command, args) => {
 		if (args.includes('display-message')) return state;
 		if (args.includes('list-clients')) return clients;
@@ -26,15 +26,26 @@ describe('click-to-focus', () => {
 		]);
 	});
 
+	it('uses ASCII field separators in callback tmux queries', async () => {
+		const run = mockRun();
+		await focusAgent(run, target);
+		const formats = run.mock.calls.filter(([, args]) => args.includes('-p') || args.includes('-F'))
+			.map(([, args]) => args.at(-1));
+		expect(formats).toEqual([
+			'#{session_id}|#{window_id}|#{pane_id}|#{window_zoomed_flag}',
+			'#{client_name}|#{session_id}|#{client_activity}|#{client_flags}',
+		]);
+	});
+
 	it('unzooms the window so a hidden agent pane becomes visible', async () => {
-		const run = mockRun('$1\t@5\t%11\t1');
+		const run = mockRun('$1|@5|%11|1');
 		await focusAgent(run, target);
 		expect(run.mock.calls[2]).toEqual([target.tmux,
 			['-S', target.socket, 'resize-pane', '-Z', '-t', '$1:@5.%11']]);
 	});
 
 	it('refuses a stale notification target without switching any client', async () => {
-		const run = mockRun('$1\t@5\t%99\t0');
+		const run = mockRun('$1|@5|%99|0');
 		await expect(focusAgent(run, target)).rejects.toThrow('no longer exists');
 		expect(run).toHaveBeenCalledTimes(1);
 	});
@@ -52,22 +63,22 @@ describe('click-to-focus', () => {
 	});
 
 	it('prefers clients already attached to the agent session', () => {
-		expect(chooseClient('/dev/ttys000\t$2\t200\tattached\n/dev/ttys001\t$1\t100\tattached', '$1'))
+		expect(chooseClient('/dev/ttys000|$2|200|attached\n/dev/ttys001|$1|100|attached', '$1'))
 			.toBe('/dev/ttys001');
 	});
 
 	it('chooses the most recently active client within the same session', () => {
-		expect(chooseClient('/dev/ttys000\t$1\t100\tattached\n/dev/ttys001\t$1\t200\tattached', '$1'))
+		expect(chooseClient('/dev/ttys000|$1|100|attached\n/dev/ttys001|$1|200|attached', '$1'))
 			.toBe('/dev/ttys001');
 	});
 
 	it('switches the most recently active existing client when the session has none', () => {
-		expect(chooseClient('/dev/ttys000\t$2\t100\tattached\n/dev/ttys001\t$3\t200\tattached', '$1'))
+		expect(chooseClient('/dev/ttys000|$2|100|attached\n/dev/ttys001|$3|200|attached', '$1'))
 			.toBe('/dev/ttys001');
 	});
 
 	it('excludes control-mode clients', () => {
-		expect(chooseClient('/dev/ttys000\t$1\t200\tattached,control-mode\n/dev/ttys001\t$2\t100\tattached', '$1'))
+		expect(chooseClient('/dev/ttys000|$1|200|attached,control-mode\n/dev/ttys001|$2|100|attached', '$1'))
 			.toBe('/dev/ttys001');
 	});
 

@@ -12,13 +12,13 @@ export async function focusAgent(run, target) {
 	const address = `${target.session}:${target.window}.${target.pane}`;
 	const tmux = async (/** @type {string[]} */ args) => run(target.tmux, ['-S', target.socket, ...args]);
 	const state = (await tmux(['display-message', '-p', '-t', address,
-		'#{session_id}\t#{window_id}\t#{pane_id}\t#{window_zoomed_flag}'])).trim().split('\t');
+		'#{session_id}|#{window_id}|#{pane_id}|#{window_zoomed_flag}'])).trim().split('|');
 	if (state[0] !== target.session || state[1] !== target.window || state[2] !== target.pane
 		|| (state[3] !== '0' && state[3] !== '1')) {
 		throw new Error('The agent tmux target no longer exists');
 	}
 	const client = chooseClient(await tmux(['list-clients', '-F',
-		'#{client_name}\t#{session_id}\t#{client_activity}\t#{client_flags}']), target.session);
+		'#{client_name}|#{session_id}|#{client_activity}|#{client_flags}']), target.session);
 	if (!client) throw new Error('No interactive tmux client is attached');
 	if (state[3] === '1') await tmux(['resize-pane', '-Z', '-t', address]);
 	await tmux(['switch-client', '-c', client, '-t', address]);
@@ -29,7 +29,7 @@ export async function focusAgent(run, target) {
 export function chooseClient(output, session) {
 	const clients = output.trim().split('\n').flatMap((line) => {
 		if (!line.trim()) return [];
-		const [name, attachedSession, activity, flagText] = line.split('\t');
+		const [name, attachedSession, activity, flagText] = line.split('|');
 		if (!name || !attachedSession || !activity || flagText === undefined
 			|| !/^\d+$/.test(activity) || !/^\$\d+$/.test(attachedSession)) {
 			throw new Error('Unexpected tmux client format');
