@@ -48,7 +48,17 @@ There is one alert per question start. Switching away after the question has alr
 
 `src/attention.ts` runs `/usr/bin/afplay` with `/System/Library/Sounds/Glass.aiff` and `terminal-notifier` without action buttons. When `terminal-notifier` is unavailable or returns an error, `/usr/bin/osascript` sends `display notification` instead. Sound playback is independent of notification delivery. The banner includes up to 180 characters of the question and the tmux window and pane IDs. Question text can appear on the lock screen according to your macOS notification settings.
 
-macOS controls the sender label and popup appearance. The default sender is terminal-notifier, with no action buttons requested by this extension. The AppleScript fallback can appear as Script Editor or an AppleScript host and can include macOS's "Show" button. This extension does not use Alacritty notification escape sequences or activate the terminal.
+macOS controls the sender label and popup appearance. The default sender is terminal-notifier, with no action buttons requested by this extension. The AppleScript fallback can appear as Script Editor or an AppleScript host and can include macOS's "Show" button. This extension does not use Alacritty notification escape sequences.
+
+## Click to return to the agent
+
+Click the body of a terminal-notifier notification to select the agent's tmux session, window, and pane, then bring Alacritty forward. The callback runs `src/focus-cli.mjs` through the same Node executable as Pi, with absolute helper and tmux paths. It captures the tmux socket and stable session, window, and pane IDs when the notification is sent. Question text is not included in the callback command.
+
+The helper selects the most recently active interactive client already attached to the agent's session. If that session has no client, it switches the most recently active attached client to the session. It unzooms the target window so the agent pane becomes visible. A removed target or no attached client stops the callback without opening a new terminal window.
+
+With multiple Alacritty windows, macOS decides which application window comes forward. The helper selects the exact tmux target in the chosen client, but it does not use Accessibility permissions to raise a specific Alacritty window. Keep one attached Alacritty client if you need an unambiguous application window.
+
+The AppleScript fallback does not support click-to-focus. Clicking its notification can open the AppleScript host instead.
 
 ## Test the notification
 
@@ -58,7 +68,7 @@ Run this inside interactive Pi:
 /attention-test
 ```
 
-The command ignores focus and sends one banner and sound. If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
+The command ignores focus and sends one banner and sound. Inside tmux, the banner's click callback targets the pane running Pi. If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
 
 Command failures produce a Pi warning without cancelling the question. tmux and notification commands have a three-second timeout. Sound playback has a ten-second timeout to allow audio-device startup. No timers, polling, or background watchers are installed.
 

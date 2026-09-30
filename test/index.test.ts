@@ -25,6 +25,8 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 		if (args[0] === 'display-message') stdout = '@2\t1\t%11\t0';
 		if (args[0] === 'list-clients') stdout = clients;
 		if (args[0] === 'show-options') stdout = focusEvents;
+		if (args[0] === '-S' && args[2] === 'display-message') stdout = '$1\t@2\t%11';
+		if (command === '/usr/bin/which') stdout = '/opt/homebrew/bin/tmux';
 		if (command === '/usr/bin/osascript' && args[0] === '-l') stdout = frontmostApp;
 		const failed = command === fail || (fail === '/usr/bin/osascript' && command === 'terminal-notifier');
 		return { stdout, stderr: failed ? 'failed' : '', code: failed ? 1 : 0, killed: false };
@@ -55,7 +57,7 @@ describe('Pi event integration', () => {
 	it('notifies and plays sound for a question in a hidden window', async () => {
 		const { fire, exec } = setup();
 		await fire();
-		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?']), { timeout: 3000 });
+		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?', '-execute']), { timeout: 3000 });
 		expect(exec).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array), { timeout: 10000 });
 	});
 

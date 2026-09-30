@@ -1,3 +1,11 @@
+import { fileURLToPath } from 'node:url';
+
+export interface ClickTarget {
+	pane: string;
+	socket: string;
+	terminalBundleId: string;
+}
+
 export type RunCommand = (command: string, args: string[]) => Promise<string>;
 
 export interface TmuxWindow {
@@ -34,10 +42,10 @@ export async function inspectFocus(run: RunCommand, pane: string, terminalBundle
 	};
 }
 
-export async function sendAttention(run: RunCommand, question: string, subtitle: string) {
+export async function sendAttention(run: RunCommand, question: string, subtitle: string, clickTarget?: ClickTarget) {
 	const body = question.replace(/[\p{Cc}\p{Cf}]+/gu, ' ').trim().slice(0, 180);
 	const results = await Promise.allSettled([
-		sendNotification(run, body, subtitle),
+		sendNotification(run, body, subtitle, clickTarget),
 		run('/usr/bin/afplay', ['/System/Library/Sounds/Glass.aiff']),
 	]);
 	const errors = results.flatMap((result, index) => result.status === 'rejected'
@@ -46,6 +54,32 @@ export async function sendAttention(run: RunCommand, question: string, subtitle:
 	if (errors.length > 0) {
 		throw new Error(errors.join('; '));
 	}
+}
+
+export function tmuxSocket(value: string) {
+	const lastComma = value.lastIndexOf(',');
+	const secondLastComma = value.lastIndexOf(',', lastComma - 1);
+	const socket = value.slice(0, secondLastComma);
+	if (secondLastComma < 1 || !socket.startsWith('/')) {
+		throw new Error('Unexpected TMUX environment format');
+	}
+	return socket;
+}
+
+export async function clickCommand(run: RunCommand, target: ClickTarget) {
+	const [address, tmuxPath] = await Promise.all([
+		run('tmux', ['-S', target.socket, 'display-message', '-p', '-t', target.pane,
+			'#{session_id}\t#{window_id}\t#{pane_id}']),
+		run('/usr/bin/which', ['tmux']),
+	]);
+	const [session, window, pane] = address.trim().split('\t');
+	if (!session || !/^\$\d+$/.test(session) || !window || !/^@\d+$/.test(window)
+		|| pane !== target.pane || !/^%\d+$/.test(pane) || !tmuxPath.trim().startsWith('/')) {
+		throw new Error('Invalid tmux notification target');
+	}
+	const helper = fileURLToPath(new URL('./focus-cli.mjs', import.meta.url));
+	return [process.execPath, helper, target.socket, session, window, pane,
+		tmuxPath.trim(), target.terminalBundleId].map(shellQuote).join(' ');
 }
 
 export function questionText(args: unknown) {
@@ -75,13 +109,19 @@ export function isVisible(window: TmuxWindow, clients: string, tracksTerminalFoc
 	});
 }
 
-async function sendNotification(run: RunCommand, body: string, subtitle: string) {
+async function sendNotification(run: RunCommand, body: string, subtitle: string, clickTarget?: ClickTarget) {
 	try {
-		await run('terminal-notifier', ['-title', 'Pi needs attention', '-subtitle', subtitle, '-message', body]);
+		const args = ['-title', 'Pi needs attention', '-subtitle', subtitle, '-message', body];
+		if (clickTarget) args.push('-execute', await clickCommand(run, clickTarget));
+		await run('terminal-notifier', args);
 	} catch {
 		// AppleScript keeps notifications available when the optional helper is missing or fails.
 		await run('/usr/bin/osascript', ['-e', NOTIFICATION_SCRIPT, '--', body, subtitle]);
 	}
+}
+
+function shellQuote(value: string) {
+	return `'${value.replace(/'/g, '\'"\'"\'')}'`;
 }
 
 function parseWindow(output: string): TmuxWindow {
