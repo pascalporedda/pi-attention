@@ -57,7 +57,7 @@ describe('Pi event integration', () => {
 	it('notifies and plays sound for a question in a hidden window', async () => {
 		const { fire, exec } = setup();
 		await fire();
-		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?', '-execute']), { timeout: 3000 });
+		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?', '-activate', 'org.alacritty', '-execute']), { timeout: 3000 });
 		expect(exec).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array), { timeout: 10000 });
 	});
 

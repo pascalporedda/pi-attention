@@ -17,13 +17,12 @@ function mockRun(state = '$1\t@5\t%11\t0', clients = '/dev/ttys000\t$1\t100\tatt
 }
 
 describe('click-to-focus', () => {
-	it('selects the exact socket, session, window and pane before activating Alacritty', async () => {
+	it('selects the exact socket, session, window and pane', async () => {
 		const run = mockRun();
 		await focusAgent(run, target);
 		expect(run.mock.calls.slice(2)).toEqual([
 			[target.tmux, ['-S', target.socket, 'switch-client', '-c', '/dev/ttys000', '-t', '$1:@5.%11']],
 			[target.tmux, ['-S', target.socket, 'select-pane', '-t', '$1:@5.%11']],
-			['/usr/bin/open', ['-b', 'org.alacritty']],
 		]);
 	});
 
@@ -85,7 +84,7 @@ describe('notification callback command', () => {
 	it('uses absolute executable and helper paths with captured tmux IDs', async () => {
 		const command = await clickCommand(run, clickTarget);
 		expect(command).toContain('focus-cli.mjs');
-		expect(command).toContain("'$1' '@5' '%11' '/opt/homebrew/bin/tmux' 'org.alacritty'");
+		expect(command).toContain("'$1' '@5' '%11' '/opt/homebrew/bin/tmux'");
 		expect(command.startsWith(`'${process.execPath}'`)).toBe(true);
 	});
 
@@ -104,6 +103,8 @@ describe('notification callback command', () => {
 		await sendAttention(calls, question, 'test', clickTarget);
 		const args = calls.mock.calls.find(([command]) => command === 'terminal-notifier')?.[1];
 		expect(args).toContain(question);
+		expect(args).toContain('-activate');
+		expect(args?.[args.indexOf('-activate') + 1]).toBe('org.alacritty');
 		expect(args).toContain('-execute');
 		expect(args?.at(-1)).not.toContain(question);
 	});

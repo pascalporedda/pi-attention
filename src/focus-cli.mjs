@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-/** @typedef {{ socket: string, session: string, window: string, pane: string, tmux: string, terminalBundleId: string }} FocusTarget */
+/** @typedef {{ socket: string, session: string, window: string, pane: string, tmux: string }} FocusTarget */
 /** @typedef {(command: string, args: string[]) => Promise<string>} RunCommand */
 
 /** @param {RunCommand} run @param {FocusTarget} target */
@@ -23,7 +23,6 @@ export async function focusAgent(run, target) {
 	if (state[3] === '1') await tmux(['resize-pane', '-Z', '-t', address]);
 	await tmux(['switch-client', '-c', client, '-t', address]);
 	await tmux(['select-pane', '-t', address]);
-	await run('/usr/bin/open', ['-b', target.terminalBundleId]);
 }
 
 /** @param {string} output @param {string} session */
@@ -47,20 +46,20 @@ export function chooseClient(output, session) {
 /** @param {FocusTarget} target */
 function validateTarget(target) {
 	if (!/^\$\d+$/.test(target.session) || !/^@\d+$/.test(target.window) || !/^%\d+$/.test(target.pane)
-		|| !target.socket.startsWith('/') || !target.tmux.startsWith('/') || !target.terminalBundleId.trim()) {
+		|| !target.socket.startsWith('/') || !target.tmux.startsWith('/')) {
 		throw new Error('Invalid tmux focus target');
 	}
 }
 
 async function main() {
-	const [socket, session, window, pane, tmux, terminalBundleId] = process.argv.slice(2);
-	if (!socket || !session || !window || !pane || !tmux || !terminalBundleId) {
-		throw new Error('Expected socket, session, window, pane, tmux executable, and terminal bundle ID');
+	const [socket, session, window, pane, tmux] = process.argv.slice(2);
+	if (!socket || !session || !window || !pane || !tmux) {
+		throw new Error('Expected socket, session, window, pane, and tmux executable');
 	}
 	const execute = promisify(execFile);
 	/** @type {RunCommand} */
 	const run = async (command, args) => (await execute(command, args, { timeout: 3000 })).stdout;
-	await focusAgent(run, { socket, session, window, pane, tmux, terminalBundleId });
+	await focusAgent(run, { socket, session, window, pane, tmux });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -79,7 +79,7 @@ export async function clickCommand(run: RunCommand, target: ClickTarget) {
 	}
 	const helper = fileURLToPath(new URL('./focus-cli.mjs', import.meta.url));
 	return [process.execPath, helper, target.socket, session, window, pane,
-		tmuxPath.trim(), target.terminalBundleId].map(shellQuote).join(' ');
+		tmuxPath.trim()].map(shellQuote).join(' ');
 }
 
 export function questionText(args: unknown) {
@@ -112,7 +112,9 @@ export function isVisible(window: TmuxWindow, clients: string, tracksTerminalFoc
 async function sendNotification(run: RunCommand, body: string, subtitle: string, clickTarget?: ClickTarget) {
 	try {
 		const args = ['-title', 'Pi needs attention', '-subtitle', subtitle, '-message', body];
-		if (clickTarget) args.push('-execute', await clickCommand(run, clickTarget));
+		if (clickTarget) {
+			args.push('-activate', clickTarget.terminalBundleId, '-execute', await clickCommand(run, clickTarget));
+		}
 		await run('terminal-notifier', args);
 	} catch {
 		// AppleScript keeps notifications available when the optional helper is missing or fails.
