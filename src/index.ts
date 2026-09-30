@@ -24,12 +24,14 @@ export default function attention(pi: ExtensionAPI) {
 				ctx.ui.notify('Pi attention: run tmux set -s focus-events on for tmux client focus tracking.', 'warning');
 			}
 			if (focus.visible) return;
-			await sendAttention(run, questionText(event.args),
+			void sendAttention(run, questionText(event.args),
 				`tmux window ${focus.window.index} (${focus.window.id}), pane ${focus.window.pane}`, {
 					pane: process.env.TMUX_PANE,
 					socket: tmuxSocket(process.env.TMUX),
 					terminalBundleId: process.env.PI_ATTENTION_TERMINAL_BUNDLE_ID || 'org.alacritty',
-				});
+				}).catch((error: unknown) => {
+				ctx.ui.notify(`Pi attention: ${errorMessage(error)}`, 'warning');
+			});
 		} catch (error) {
 			ctx.ui.notify(`Pi attention: ${errorMessage(error)}`, 'warning');
 		}

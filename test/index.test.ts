@@ -18,9 +18,21 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
-function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents = 'on', frontmostApp = 'org.alacritty' } = {}) {
+function eventSignal() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((done) => { resolve = done; });
+	return { promise, resolve };
+}
+
+function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents = 'on', frontmostApp = 'org.alacritty', sound = Promise.resolve() } = {}) {
 	let handler: StartHandler | undefined;
+	const notification = eventSignal();
+	const fallback = eventSignal();
+	const warning = eventSignal();
 	const exec = vi.fn(async (command: string, args: string[]) => {
+		if (command === '/usr/bin/afplay') await sound;
+		if (command === 'terminal-notifier') notification.resolve();
+		if (command === '/usr/bin/osascript' && args[0] === '-e') fallback.resolve();
 		let stdout = '';
 		if (args[0] === 'display-message') stdout = '@2\t1\t%11\t0';
 		if (args[0] === 'list-clients') stdout = clients;
@@ -36,7 +48,7 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 		on: vi.fn((_event: string, callback: StartHandler) => { handler = callback; }),
 		registerCommand: vi.fn(),
 	};
-	const notify = vi.fn();
+	const notify = vi.fn(() => warning.resolve());
 	// Only the API and context members exercised by this extension exist in these test doubles.
 	attention(api as unknown as ExtensionAPI);
 	const ctx = { mode: 'tui', ui: { notify } } as unknown as ExtensionContext;
@@ -46,6 +58,9 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 		exec,
 		notify,
 		api,
+		notificationSent: notification.promise,
+		fallbackSent: fallback.promise,
+		warningShown: warning.promise,
 		fire: (toolName = 'ask_user_question', context = ctx) => start({
 			type: 'tool_execution_start', toolName, toolCallId: 'question-1', args: { question: 'Continue?' },
 		}, context),
@@ -55,10 +70,22 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 
 describe('Pi event integration', () => {
 	it('notifies and plays sound for a question in a hidden window', async () => {
-		const { fire, exec } = setup();
+		const { fire, exec, notificationSent } = setup();
 		await fire();
+		await notificationSent;
 		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?', '-activate', 'org.alacritty', '-execute']), { timeout: 3000 });
 		expect(exec).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array), { timeout: 10000 });
+	});
+
+	it('opens the question without waiting for sound playback to finish', async () => {
+		const sound = eventSignal();
+		const { fire, notificationSent } = setup({ sound: sound.promise });
+		try {
+			await expect(fire()).resolves.toBeUndefined();
+			await notificationSent;
+		} finally {
+			sound.resolve();
+		}
 	});
 
 	it('does not notify for a visible window', async () => {
@@ -69,14 +96,16 @@ describe('Pi event integration', () => {
 	});
 
 	it('notifies after Alt-Tab even if the same tmux window remains focused', async () => {
-		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.apple.finder' });
+		const { fire, exec, notificationSent } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.apple.finder' });
 		await fire();
+		await notificationSent;
 		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.any(Array), { timeout: 3000 });
 	});
 
 	it('falls back without cancelling the question when terminal-notifier fails', async () => {
-		const { fire, exec, notify } = setup({ fail: 'terminal-notifier' });
+		const { fire, exec, notify, fallbackSent } = setup({ fail: 'terminal-notifier' });
 		await fire();
+		await fallbackSent;
 		expect(exec).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Continue?']), { timeout: 3000 });
 		expect(notify).not.toHaveBeenCalled();
 	});
@@ -115,8 +144,9 @@ describe('Pi event integration', () => {
 	});
 
 	it.each(['tmux', '/usr/bin/osascript', '/usr/bin/afplay'])('never cancels the question when %s fails', async (fail) => {
-		const { fire, notify } = setup({ fail });
+		const { fire, notify, warningShown } = setup({ fail });
 		await expect(fire()).resolves.toBeUndefined();
+		await warningShown;
 		expect(notify).toHaveBeenCalledWith(expect.stringContaining('failed'), 'warning');
 	});
 

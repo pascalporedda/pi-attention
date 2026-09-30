@@ -64,7 +64,7 @@ The AppleScript fallback does not support click-to-focus. Clicking its notificat
 
 If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
 
-Command failures produce a Pi warning without cancelling the question. tmux and notification commands have a three-second timeout. Sound playback has a ten-second timeout to allow audio-device startup. No timers, polling, or background watchers are installed.
+Alert delivery runs in the background after the focus check, so the question does not wait for sound playback to finish. Command failures produce a Pi warning without cancelling the question. tmux and notification commands have a three-second timeout. Sound playback has a ten-second timeout to allow audio-device startup. No timers, polling, or background watchers are installed.
 
 ## Develop
 
