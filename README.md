@@ -68,13 +68,19 @@ Alert delivery runs in the background after the focus check, so the question doe
 
 ## Develop
 
+`vite.config.ts` configures Vite+ 1.0.0, Oxlint's type-aware checks, and Oxfmt. `package.json` pins the Pi development dependency to 0.99.1. `.node-version` pins Node 24.21.0, and `package.json` selects pnpm 12.8.1.
+
 ```sh
-pnpm install
-pnpm test
-pnpm typecheck
-pnpm lint
-pi -e ./src/index.ts
+vp install
+vp check
+vp test run
+vp run typecheck
+vp exec pi -e ./src/index.ts
 ```
+
+`vp check` checks formatting, lint rules, and types. `vp run typecheck` also runs the full TypeScript compiler through Vite+ with `checkJs` enabled for the `.mjs` click helper. Run `vp fmt` to format files or `vp check --fix` to apply formatting and lint fixes. All test imports use `vite-plus/test`.
+
+Without a global Vite+ CLI, use `pnpm exec vp` in place of `vp` after `pnpm install`. Pi loads the TypeScript source directly, so this package has no application build or library bundling step.
 
 For a personal install from your working copy:
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import type { RunCommand, TmuxWindow } from '../src/attention.js';
 import { inspectFocus, isVisible, questionText, sendAttention } from '../src/attention.js';
 
@@ -13,7 +13,12 @@ describe('tmux visibility', () => {
 		['no attached clients', '', true, false],
 		['control-mode client', '@2\t%11\tattached,focused,control-mode', true, false],
 		['focus tracking disabled', '@2\t%11\tattached,UTF-8', false, true],
-		['second client sees window', '@3\t%12\tattached,focused\n@2\t%2\tattached,focused', true, true],
+		[
+			'second client sees window',
+			'@3\t%12\tattached,focused\n@2\t%2\tattached,focused',
+			true,
+			true,
+		],
 	])('%s', (_name, clients, tracksFocus, visible) => {
 		expect(isVisible(window, clients, tracksFocus)).toBe(visible);
 	});
@@ -44,24 +49,33 @@ describe('focus inspection', () => {
 	it('targets the agent pane rather than the active pane', async () => {
 		const run = mockRun();
 		await expect(inspectFocus(run, '%11')).resolves.toEqual({
-			window, tracksTerminalFocus: true, visible: true,
+			window,
+			tracksTerminalFocus: true,
+			visible: true,
 		});
 		expect(run.mock.calls[0]?.[1]).toContain('%11');
 	});
 
 	it('detects Alt-Tab even when tmux still reports focused', async () => {
-		await expect(inspectFocus(mockRun(undefined, 'on', 'com.apple.systempreferences'), '%11'))
-			.resolves.toMatchObject({ visible: false });
+		await expect(
+			inspectFocus(mockRun(undefined, 'on', 'com.apple.systempreferences'), '%11'),
+		).resolves.toMatchObject({ visible: false });
 	});
 
 	it('supports another terminal bundle ID', async () => {
-		await expect(inspectFocus(mockRun(undefined, 'on', 'com.googlecode.iterm2'), '%11', 'com.googlecode.iterm2'))
-			.resolves.toMatchObject({ visible: true });
+		await expect(
+			inspectFocus(
+				mockRun(undefined, 'on', 'com.googlecode.iterm2'),
+				'%11',
+				'com.googlecode.iterm2',
+			),
+		).resolves.toMatchObject({ visible: true });
 	});
 
 	it('uses native app focus even with tmux focus tracking disabled', async () => {
-		await expect(inspectFocus(mockRun(undefined, 'off', 'com.apple.finder'), '%11'))
-			.resolves.toMatchObject({ visible: false });
+		await expect(
+			inspectFocus(mockRun(undefined, 'off', 'com.apple.finder'), '%11'),
+		).resolves.toMatchObject({ visible: false });
 	});
 
 	it('reports disabled focus tracking', async () => {
@@ -85,19 +99,27 @@ describe('macOS attention', () => {
 		const run = vi.fn<RunCommand>().mockResolvedValue('');
 		await sendAttention(run, 'Question?', 'tmux window 1');
 		expect(run).toHaveBeenCalledWith('terminal-notifier', [
-			'-title', 'Pi needs attention', '-subtitle', 'tmux window 1', '-message', 'Question?',
+			'-title',
+			'Pi needs attention',
+			'-subtitle',
+			'tmux window 1',
+			'-message',
+			'Question?',
 		]);
 		expect(run.mock.calls.some(([command]) => command.endsWith('osascript'))).toBe(false);
 	});
 
-	it.each(['not installed', 'permission denied', 'timeout'])('falls back to AppleScript when notifier fails: %s', async (message) => {
-		const run = vi.fn<RunCommand>(async (command) => {
-			if (command === 'terminal-notifier') throw new Error(message);
-			return '';
-		});
-		await expect(sendAttention(run, 'Question?', 'test')).resolves.toBeUndefined();
-		expect(run).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Question?']));
-	});
+	it.each(['not installed', 'permission denied', 'timeout'])(
+		'falls back to AppleScript when notifier fails: %s',
+		async (message) => {
+			const run = vi.fn<RunCommand>(async (command) => {
+				if (command === 'terminal-notifier') throw new Error(message);
+				return '';
+			});
+			await expect(sendAttention(run, 'Question?', 'test')).resolves.toBeUndefined();
+			expect(run).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Question?']));
+		},
+	);
 
 	it('passes question text as argv, never as AppleScript source', async () => {
 		const run = vi.fn<RunCommand>(async (command) => {
@@ -118,17 +140,23 @@ describe('macOS attention', () => {
 		expect(run.mock.calls[0]?.[1].at(-1)).toBe('x'.repeat(180));
 	});
 
-	it.each(['/usr/bin/osascript', '/usr/bin/afplay'])('still attempts both channels if %s fails', async (failing) => {
-		const run = vi.fn<RunCommand>(async (command) => {
-			if (command === failing || (failing === '/usr/bin/osascript' && command === 'terminal-notifier')) {
-				throw new Error('permission denied');
-			}
-			return '';
-		});
-		await expect(sendAttention(run, 'Question?', 'test')).rejects.toThrow('permission denied');
-		expect(run).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array));
-		expect(run).toHaveBeenCalledWith('terminal-notifier', expect.any(Array));
-	});
+	it.each(['/usr/bin/osascript', '/usr/bin/afplay'])(
+		'still attempts both channels if %s fails',
+		async (failing) => {
+			const run = vi.fn<RunCommand>(async (command) => {
+				if (
+					command === failing ||
+					(failing === '/usr/bin/osascript' && command === 'terminal-notifier')
+				) {
+					throw new Error('permission denied');
+				}
+				return '';
+			});
+			await expect(sendAttention(run, 'Question?', 'test')).rejects.toThrow('permission denied');
+			expect(run).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array));
+			expect(run).toHaveBeenCalledWith('terminal-notifier', expect.any(Array));
+		},
+	);
 });
 
 describe('question text', () => {
@@ -136,7 +164,10 @@ describe('question text', () => {
 		expect(questionText({ question: 'Which option?' })).toBe('Which option?');
 	});
 
-	it.each([null, undefined, {}, { question: 123 }, { question: '  ' }])('handles missing question %j', (args) => {
-		expect(questionText(args)).toBe('Your agent is waiting for an answer.');
-	});
+	it.each([null, undefined, {}, { question: 123 }, { question: '  ' }])(
+		'handles missing question %j',
+		(args) => {
+			expect(questionText(args)).toBe('Your agent is waiting for an answer.');
+		},
+	);
 });

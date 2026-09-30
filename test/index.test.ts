@@ -1,5 +1,9 @@
-import type { ExtensionAPI, ExtensionContext, ToolExecutionStartEvent } from '@earendil-works/pi-coding-agent';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+	ToolExecutionStartEvent,
+} from '@earendil-works/pi-coding-agent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import attention from '../src/index.js';
 
 type StartHandler = (event: ToolExecutionStartEvent, ctx: ExtensionContext) => Promise<void>;
@@ -20,11 +24,19 @@ afterEach(() => {
 
 function eventSignal() {
 	let resolve!: () => void;
-	const promise = new Promise<void>((done) => { resolve = done; });
+	const promise = new Promise<void>((done) => {
+		resolve = done;
+	});
 	return { promise, resolve };
 }
 
-function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents = 'on', frontmostApp = 'org.alacritty', sound = Promise.resolve() } = {}) {
+function setup({
+	clients = '@3\t%12\tattached,focused',
+	fail = '',
+	focusEvents = 'on',
+	frontmostApp = 'org.alacritty',
+	sound = Promise.resolve(),
+} = {}) {
 	let handler: StartHandler | undefined;
 	const notification = eventSignal();
 	const fallback = eventSignal();
@@ -40,12 +52,15 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 		if (args[0] === '-S' && args[2] === 'display-message') stdout = '$1\t@2\t%11';
 		if (command === '/usr/bin/which') stdout = '/opt/homebrew/bin/tmux';
 		if (command === '/usr/bin/osascript' && args[0] === '-l') stdout = frontmostApp;
-		const failed = command === fail || (fail === '/usr/bin/osascript' && command === 'terminal-notifier');
+		const failed =
+			command === fail || (fail === '/usr/bin/osascript' && command === 'terminal-notifier');
 		return { stdout, stderr: failed ? 'failed' : '', code: failed ? 1 : 0, killed: false };
 	});
 	const api = {
 		exec,
-		on: vi.fn((_event: string, callback: StartHandler) => { handler = callback; }),
+		on: vi.fn((_event: string, callback: StartHandler) => {
+			handler = callback;
+		}),
 		registerCommand: vi.fn(),
 	};
 	const notify = vi.fn(() => warning.resolve());
@@ -61,9 +76,16 @@ function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents =
 		notificationSent: notification.promise,
 		fallbackSent: fallback.promise,
 		warningShown: warning.promise,
-		fire: (toolName = 'ask_user_question', context = ctx) => start({
-			type: 'tool_execution_start', toolName, toolCallId: 'question-1', args: { question: 'Continue?' },
-		}, context),
+		fire: (toolName = 'ask_user_question', context = ctx) =>
+			start(
+				{
+					type: 'tool_execution_start',
+					toolName,
+					toolCallId: 'question-1',
+					args: { question: 'Continue?' },
+				},
+				context,
+			),
 		ctx,
 	};
 }
@@ -73,7 +95,11 @@ describe('Pi event integration', () => {
 		const { fire, exec, notificationSent } = setup();
 		await fire();
 		await notificationSent;
-		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?', '-activate', 'org.alacritty', '-execute']), { timeout: 3000 });
+		expect(exec).toHaveBeenCalledWith(
+			'terminal-notifier',
+			expect.arrayContaining(['Continue?', '-activate', 'org.alacritty', '-execute']),
+			{ timeout: 3000 },
+		);
 		expect(exec).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array), { timeout: 10000 });
 	});
 
@@ -92,11 +118,18 @@ describe('Pi event integration', () => {
 		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused' });
 		await fire();
 		expect(exec).toHaveBeenCalledTimes(4);
-		expect(exec.mock.calls.some(([command]) => command === 'terminal-notifier' || command === '/usr/bin/afplay')).toBe(false);
+		expect(
+			exec.mock.calls.some(
+				([command]) => command === 'terminal-notifier' || command === '/usr/bin/afplay',
+			),
+		).toBe(false);
 	});
 
 	it('notifies after Alt-Tab even if the same tmux window remains focused', async () => {
-		const { fire, exec, notificationSent } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.apple.finder' });
+		const { fire, exec, notificationSent } = setup({
+			clients: '@2\t%2\tattached,focused',
+			frontmostApp: 'com.apple.finder',
+		});
 		await fire();
 		await notificationSent;
 		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.any(Array), { timeout: 3000 });
@@ -106,13 +139,18 @@ describe('Pi event integration', () => {
 		const { fire, exec, notify, fallbackSent } = setup({ fail: 'terminal-notifier' });
 		await fire();
 		await fallbackSent;
-		expect(exec).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Continue?']), { timeout: 3000 });
+		expect(exec).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Continue?']), {
+			timeout: 3000,
+		});
 		expect(notify).not.toHaveBeenCalled();
 	});
 
 	it('uses the configured terminal bundle ID', async () => {
 		vi.stubEnv('PI_ATTENTION_TERMINAL_BUNDLE_ID', 'com.googlecode.iterm2');
-		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.googlecode.iterm2' });
+		const { fire, exec } = setup({
+			clients: '@2\t%2\tattached,focused',
+			frontmostApp: 'com.googlecode.iterm2',
+		});
 		await fire();
 		expect(exec).toHaveBeenCalledTimes(4);
 	});
@@ -143,12 +181,15 @@ describe('Pi event integration', () => {
 		expect(exec).not.toHaveBeenCalled();
 	});
 
-	it.each(['tmux', '/usr/bin/osascript', '/usr/bin/afplay'])('never cancels the question when %s fails', async (fail) => {
-		const { fire, notify, warningShown } = setup({ fail });
-		await expect(fire()).resolves.toBeUndefined();
-		await warningShown;
-		expect(notify).toHaveBeenCalledWith(expect.stringContaining('failed'), 'warning');
-	});
+	it.each(['tmux', '/usr/bin/osascript', '/usr/bin/afplay'])(
+		'never cancels the question when %s fails',
+		async (fail) => {
+			const { fire, notify, warningShown } = setup({ fail });
+			await expect(fire()).resolves.toBeUndefined();
+			await warningShown;
+			expect(notify).toHaveBeenCalledWith(expect.stringContaining('failed'), 'warning');
+		},
+	);
 
 	it('warns once when focus-events is off', async () => {
 		const { fire, notify } = setup({ clients: '@2\t%2\tattached', focusEvents: 'off' });
