@@ -127,10 +127,8 @@ describe('Pi event integration', () => {
 		expect(notify).toHaveBeenCalledTimes(1);
 	});
 
-	it('registers an explicit notification test command', () => {
+	it('does not register slash commands', () => {
 		const { api } = setup();
-		expect(api.registerCommand).toHaveBeenCalledWith('attention-test', expect.objectContaining({
-			handler: expect.any(Function),
-		}));
+		expect(api.registerCommand).not.toHaveBeenCalled();
 	});
 });

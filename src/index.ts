@@ -34,25 +34,4 @@ export default function attention(pi: ExtensionAPI) {
 			ctx.ui.notify(`Pi attention: ${errorMessage(error)}`, 'warning');
 		}
 	});
-
-	pi.registerCommand('attention-test', {
-		description: 'Play the attention sound and send a macOS notification, ignoring focus',
-		handler: async (_args, ctx) => {
-			if (ctx.mode !== 'tui' || process.platform !== 'darwin') {
-				ctx.ui.notify('Pi attention requires interactive Pi on macOS.', 'warning');
-				return;
-			}
-			try {
-				const clickTarget = process.env.TMUX && process.env.TMUX_PANE ? {
-					pane: process.env.TMUX_PANE,
-					socket: tmuxSocket(process.env.TMUX),
-					terminalBundleId: process.env.PI_ATTENTION_TERMINAL_BUNDLE_ID || 'org.alacritty',
-				} : undefined;
-				await sendAttention(run, 'Your agent is waiting for an answer.', 'Pi attention test', clickTarget);
-				ctx.ui.notify('Attention test sent. Check macOS notification permissions if no banner appears.', 'info');
-			} catch (error) {
-				ctx.ui.notify(`Pi attention: ${errorMessage(error)}`, 'warning');
-			}
-		},
-	});
 }

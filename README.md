@@ -60,15 +60,9 @@ With multiple Alacritty windows, macOS decides which application window comes fo
 
 The AppleScript fallback does not support click-to-focus. Clicking its notification can open the AppleScript host instead.
 
-## Test the notification
+## Troubleshoot notifications
 
-Run this inside interactive Pi:
-
-```text
-/attention-test
-```
-
-The command ignores focus and sends one banner and sound. Inside tmux, the banner's click callback targets the pane running Pi. If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
+If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
 
 Command failures produce a Pi warning without cancelling the question. tmux and notification commands have a three-second timeout. Sound playback has a ten-second timeout to allow audio-device startup. No timers, polling, or background watchers are installed.
 
