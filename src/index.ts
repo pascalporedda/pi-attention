@@ -17,10 +17,11 @@ export default function attention(pi: ExtensionAPI) {
 		if (event.toolName !== 'ask_user_question' || ctx.mode !== 'tui'
 			|| process.platform !== 'darwin' || !process.env.TMUX || !process.env.TMUX_PANE) return;
 		try {
-			const focus = await inspectFocus(run, process.env.TMUX_PANE);
+			const focus = await inspectFocus(run, process.env.TMUX_PANE,
+				process.env.PI_ATTENTION_TERMINAL_BUNDLE_ID || 'org.alacritty');
 			if (!focus.tracksTerminalFocus && !warnedAboutFocus) {
 				warnedAboutFocus = true;
-				ctx.ui.notify('Pi attention: run tmux set -s focus-events on to detect terminal app focus.', 'warning');
+				ctx.ui.notify('Pi attention: run tmux set -s focus-events on for tmux client focus tracking.', 'warning');
 			}
 			if (focus.visible) return;
 			await sendAttention(run, questionText(event.args),

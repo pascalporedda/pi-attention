@@ -11,12 +11,15 @@ const NOTIFICATION_SCRIPT = `on run argv
 	display notification (item 1 of argv) with title "Pi needs attention" subtitle (item 2 of argv)
 end run`;
 
-export async function inspectFocus(run: RunCommand, pane: string) {
-	const [target, clients, focusEvents] = await Promise.all([
+const FRONTMOST_APP_SCRIPT = 'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.frontmostApplication.bundleIdentifier.js';
+
+export async function inspectFocus(run: RunCommand, pane: string, terminalBundleId = 'org.alacritty') {
+	const [target, clients, focusEvents, frontmostApp] = await Promise.all([
 		run('tmux', ['display-message', '-p', '-t', pane,
 			'#{window_id}\t#{window_index}\t#{pane_id}\t#{window_zoomed_flag}']),
 		run('tmux', ['list-clients', '-F', '#{window_id}\t#{pane_id}\t#{client_flags}']),
 		run('tmux', ['show-options', '-sv', 'focus-events']),
+		run('/usr/bin/osascript', ['-l', 'JavaScript', '-e', FRONTMOST_APP_SCRIPT]),
 	]);
 	const window = parseWindow(target);
 	if (window.pane !== pane) {
@@ -26,14 +29,15 @@ export async function inspectFocus(run: RunCommand, pane: string) {
 	return {
 		window,
 		tracksTerminalFocus,
-		visible: isVisible(window, clients, tracksTerminalFocus),
+		visible: frontmostApp.trim() === terminalBundleId
+			&& isVisible(window, clients, tracksTerminalFocus),
 	};
 }
 
 export async function sendAttention(run: RunCommand, question: string, subtitle: string) {
 	const body = question.replace(/[\p{Cc}\p{Cf}]+/gu, ' ').trim().slice(0, 180);
 	const results = await Promise.allSettled([
-		run('/usr/bin/osascript', ['-e', NOTIFICATION_SCRIPT, '--', body, subtitle]),
+		sendNotification(run, body, subtitle),
 		run('/usr/bin/afplay', ['/System/Library/Sounds/Glass.aiff']),
 	]);
 	const errors = results.flatMap((result, index) => result.status === 'rejected'
@@ -69,6 +73,15 @@ export function isVisible(window: TmuxWindow, clients: string, tracksTerminalFoc
 			&& (!window.zoomed || pane === window.pane)
 			&& (!tracksTerminalFocus || flags.has('focused'));
 	});
+}
+
+async function sendNotification(run: RunCommand, body: string, subtitle: string) {
+	try {
+		await run('terminal-notifier', ['-title', 'Pi needs attention', '-subtitle', subtitle, '-message', body]);
+	} catch {
+		// AppleScript keeps notifications available when the optional helper is missing or fails.
+		await run('/usr/bin/osascript', ['-e', NOTIFICATION_SCRIPT, '--', body, subtitle]);
+	}
 }
 
 function parseWindow(output: string): TmuxWindow {

@@ -10,7 +10,15 @@ pi install git:github.com/pascalporedda/pi-attention
 
 Run `/reload` in existing Pi sessions. The extension listens to your existing `ask_user_question` tool; it does not install or replace that tool.
 
-Requires macOS, tmux, and interactive Pi. Alacritty works with tmux focus reporting. Other terminals that report focus also work.
+Requires macOS, tmux, and interactive Pi. The frontmost-app check defaults to Alacritty's bundle ID, `org.alacritty`. For another terminal, set `PI_ATTENTION_TERMINAL_BUNDLE_ID` before starting Pi, for example `com.googlecode.iterm2` for iTerm2.
+
+Install the preferred notification helper:
+
+```sh
+brew install terminal-notifier
+```
+
+If the helper is missing or its command fails, the extension falls back to macOS's built-in AppleScript notifications.
 
 Add this line to `~/.tmux.conf`:
 
@@ -30,16 +38,17 @@ Switch away from the terminal and back once so tmux receives a fresh focus event
 
 `src/index.ts` listens to `tool_execution_start` for `ask_user_question`. Each call checks the window containing the agent's `TMUX_PANE`:
 
-- A focused tmux client showing that window suppresses the alert.
-- A different selected window, an unfocused terminal, or no attached client triggers the alert.
+- The configured terminal must be macOS's frontmost app and a focused tmux client must show the agent's window to suppress the alert.
+- A different selected window, another frontmost app, an unfocused terminal, or no attached client triggers the alert.
+- `NSWorkspace` checks the frontmost app even when tmux's `focused` flag stays stale after Alt-Tab. This does not use Accessibility or System Events permissions.
 - Another selected split in the same window suppresses the alert unless that split is zoomed and hides the agent.
-- With `focus-events` off, only tmux window selection is checked. Pi shows a warning once per extension load.
+- With `focus-events` off, macOS app focus and tmux window selection are still checked. Pi shows a warning once per extension load because tmux client focus is unavailable.
 
 There is one alert per question start. Switching away after the question has already opened does not trigger another alert. JSON, RPC, print mode, non-macOS hosts, and sessions outside tmux do not send alerts. The extension checks the pane inherited by the Pi process, including agents launched in their own tmux panes.
 
-`src/attention.ts` runs `/usr/bin/afplay` with `/System/Library/Sounds/Glass.aiff` and `/usr/bin/osascript` with `display notification`. Neither requires a Homebrew package. The banner includes up to 180 characters of the question and the tmux window and pane IDs. Question text can appear on the lock screen according to your macOS notification settings.
+`src/attention.ts` runs `/usr/bin/afplay` with `/System/Library/Sounds/Glass.aiff` and `terminal-notifier` without action buttons. When `terminal-notifier` is unavailable or returns an error, `/usr/bin/osascript` sends `display notification` instead. Sound playback is independent of notification delivery. The banner includes up to 180 characters of the question and the tmux window and pane IDs. Question text can appear on the lock screen according to your macOS notification settings.
 
-macOS controls the sender label. Built-in AppleScript notifications can appear as Script Editor or an AppleScript host, **not Alacritty**. This extension does not use Alacritty notification escape sequences or activate the terminal.
+macOS controls the sender label and popup appearance. The default sender is terminal-notifier, with no action buttons requested by this extension. The AppleScript fallback can appear as Script Editor or an AppleScript host and can include macOS's "Show" button. This extension does not use Alacritty notification escape sequences or activate the terminal.
 
 ## Test the notification
 
@@ -49,7 +58,7 @@ Run this inside interactive Pi:
 /attention-test
 ```
 
-The command ignores focus and sends one banner and sound. If the sound plays without a banner, check **System Settings > Notifications** for the AppleScript notification host and disable Focus / Do Not Disturb. Successful `osascript` execution does not prove macOS displayed a banner.
+The command ignores focus and sends one banner and sound. If the sound plays without a banner, run `terminal-notifier -diagnose` and check **System Settings > Notifications** for terminal-notifier or the AppleScript fallback host. Also check Focus / Do Not Disturb. A successful notification command does not prove macOS displayed a banner. The fallback handles command failures, not a banner suppressed by macOS.
 
 Command failures produce a Pi warning without cancelling the question. tmux and notification commands have a three-second timeout. Sound playback has a ten-second timeout to allow audio-device startup. No timers, polling, or background watchers are installed.
 

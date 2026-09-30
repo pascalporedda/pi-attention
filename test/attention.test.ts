@@ -32,8 +32,9 @@ describe('tmux visibility', () => {
 });
 
 describe('focus inspection', () => {
-	function mockRun(target = '@2\t1\t%11\t0', focusEvents = 'on') {
-		return vi.fn<RunCommand>(async (_command, args) => {
+	function mockRun(target = '@2\t1\t%11\t0', focusEvents = 'on', frontmostApp = 'org.alacritty') {
+		return vi.fn<RunCommand>(async (command, args) => {
+			if (command === '/usr/bin/osascript') return frontmostApp;
 			if (args[0] === 'display-message') return target;
 			if (args[0] === 'list-clients') return '@2\t%2\tattached,focused';
 			return focusEvents;
@@ -46,6 +47,21 @@ describe('focus inspection', () => {
 			window, tracksTerminalFocus: true, visible: true,
 		});
 		expect(run.mock.calls[0]?.[1]).toContain('%11');
+	});
+
+	it('detects Alt-Tab even when tmux still reports focused', async () => {
+		await expect(inspectFocus(mockRun(undefined, 'on', 'com.apple.systempreferences'), '%11'))
+			.resolves.toMatchObject({ visible: false });
+	});
+
+	it('supports another terminal bundle ID', async () => {
+		await expect(inspectFocus(mockRun(undefined, 'on', 'com.googlecode.iterm2'), '%11', 'com.googlecode.iterm2'))
+			.resolves.toMatchObject({ visible: true });
+	});
+
+	it('uses native app focus even with tmux focus tracking disabled', async () => {
+		await expect(inspectFocus(mockRun(undefined, 'off', 'com.apple.finder'), '%11'))
+			.resolves.toMatchObject({ visible: false });
 	});
 
 	it('reports disabled focus tracking', async () => {
@@ -65,8 +81,29 @@ describe('focus inspection', () => {
 });
 
 describe('macOS attention', () => {
-	it('passes question text as argv, never as AppleScript source', async () => {
+	it('uses terminal-notifier by default without action buttons', async () => {
 		const run = vi.fn<RunCommand>().mockResolvedValue('');
+		await sendAttention(run, 'Question?', 'tmux window 1');
+		expect(run).toHaveBeenCalledWith('terminal-notifier', [
+			'-title', 'Pi needs attention', '-subtitle', 'tmux window 1', '-message', 'Question?',
+		]);
+		expect(run.mock.calls.some(([command]) => command.endsWith('osascript'))).toBe(false);
+	});
+
+	it.each(['not installed', 'permission denied', 'timeout'])('falls back to AppleScript when notifier fails: %s', async (message) => {
+		const run = vi.fn<RunCommand>(async (command) => {
+			if (command === 'terminal-notifier') throw new Error(message);
+			return '';
+		});
+		await expect(sendAttention(run, 'Question?', 'test')).resolves.toBeUndefined();
+		expect(run).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Question?']));
+	});
+
+	it('passes question text as argv, never as AppleScript source', async () => {
+		const run = vi.fn<RunCommand>(async (command) => {
+			if (command === 'terminal-notifier') throw new Error('not installed');
+			return '';
+		});
 		const question = 'Choose "yes"; do shell script "touch /tmp/injected"';
 		await sendAttention(run, question, 'tmux window 1');
 		const notification = run.mock.calls.find(([command]) => command.endsWith('osascript'));
@@ -78,16 +115,19 @@ describe('macOS attention', () => {
 	it('strips control characters and bounds notification length', async () => {
 		const run = vi.fn<RunCommand>().mockResolvedValue('');
 		await sendAttention(run, `\x1b\n${'x'.repeat(300)}`, 'test');
-		expect(run.mock.calls[0]?.[1][3]).toBe('x'.repeat(180));
+		expect(run.mock.calls[0]?.[1].at(-1)).toBe('x'.repeat(180));
 	});
 
 	it.each(['/usr/bin/osascript', '/usr/bin/afplay'])('still attempts both channels if %s fails', async (failing) => {
 		const run = vi.fn<RunCommand>(async (command) => {
-			if (command === failing) throw new Error('permission denied');
+			if (command === failing || (failing === '/usr/bin/osascript' && command === 'terminal-notifier')) {
+				throw new Error('permission denied');
+			}
 			return '';
 		});
 		await expect(sendAttention(run, 'Question?', 'test')).rejects.toThrow('permission denied');
-		expect(run).toHaveBeenCalledTimes(2);
+		expect(run).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array));
+		expect(run).toHaveBeenCalledWith('terminal-notifier', expect.any(Array));
 	});
 });
 

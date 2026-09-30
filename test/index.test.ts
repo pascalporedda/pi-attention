@@ -10,6 +10,7 @@ beforeEach(() => {
 	Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
 	vi.stubEnv('TMUX', '/tmp/tmux-501/default,123,1');
 	vi.stubEnv('TMUX_PANE', '%11');
+	vi.stubEnv('PI_ATTENTION_TERMINAL_BUNDLE_ID', 'org.alacritty');
 });
 
 afterEach(() => {
@@ -17,14 +18,16 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
-function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents = 'on' } = {}) {
+function setup({ clients = '@3\t%12\tattached,focused', fail = '', focusEvents = 'on', frontmostApp = 'org.alacritty' } = {}) {
 	let handler: StartHandler | undefined;
 	const exec = vi.fn(async (command: string, args: string[]) => {
 		let stdout = '';
 		if (args[0] === 'display-message') stdout = '@2\t1\t%11\t0';
 		if (args[0] === 'list-clients') stdout = clients;
 		if (args[0] === 'show-options') stdout = focusEvents;
-		return { stdout, stderr: command === fail ? 'failed' : '', code: command === fail ? 1 : 0, killed: false };
+		if (command === '/usr/bin/osascript' && args[0] === '-l') stdout = frontmostApp;
+		const failed = command === fail || (fail === '/usr/bin/osascript' && command === 'terminal-notifier');
+		return { stdout, stderr: failed ? 'failed' : '', code: failed ? 1 : 0, killed: false };
 	});
 	const api = {
 		exec,
@@ -52,15 +55,35 @@ describe('Pi event integration', () => {
 	it('notifies and plays sound for a question in a hidden window', async () => {
 		const { fire, exec } = setup();
 		await fire();
-		expect(exec).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Continue?']), { timeout: 3000 });
+		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.arrayContaining(['Continue?']), { timeout: 3000 });
 		expect(exec).toHaveBeenCalledWith('/usr/bin/afplay', expect.any(Array), { timeout: 10000 });
 	});
 
 	it('does not notify for a visible window', async () => {
 		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused' });
 		await fire();
-		expect(exec).toHaveBeenCalledTimes(3);
-		expect(exec.mock.calls.every(([command]) => command === 'tmux')).toBe(true);
+		expect(exec).toHaveBeenCalledTimes(4);
+		expect(exec.mock.calls.some(([command]) => command === 'terminal-notifier' || command === '/usr/bin/afplay')).toBe(false);
+	});
+
+	it('notifies after Alt-Tab even if the same tmux window remains focused', async () => {
+		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.apple.finder' });
+		await fire();
+		expect(exec).toHaveBeenCalledWith('terminal-notifier', expect.any(Array), { timeout: 3000 });
+	});
+
+	it('falls back without cancelling the question when terminal-notifier fails', async () => {
+		const { fire, exec, notify } = setup({ fail: 'terminal-notifier' });
+		await fire();
+		expect(exec).toHaveBeenCalledWith('/usr/bin/osascript', expect.arrayContaining(['Continue?']), { timeout: 3000 });
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	it('uses the configured terminal bundle ID', async () => {
+		vi.stubEnv('PI_ATTENTION_TERMINAL_BUNDLE_ID', 'com.googlecode.iterm2');
+		const { fire, exec } = setup({ clients: '@2\t%2\tattached,focused', frontmostApp: 'com.googlecode.iterm2' });
+		await fire();
+		expect(exec).toHaveBeenCalledTimes(4);
 	});
 
 	it('ignores other tools', async () => {
